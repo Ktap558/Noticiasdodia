@@ -1,36 +1,67 @@
+
 name: Atualizar notícias e publicar PWA
+
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   schedule:
     - cron: '*/30 * * * *'
   workflow_dispatch:
+
 permissions:
   contents: read
   pages: write
   id-token: write
+
 concurrency:
   group: pages
   cancel-in-progress: false
+
 jobs:
   publicar:
     runs-on: ubuntu-latest
+
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Baixar arquivos do repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
       - name: Buscar notícias dos feeds RSS
-        run: python scripts/atualizar.py
-      - name: Conferir se as notícias foram baixadas
-        run: python -c "import json; d=json.load(open('noticias.json')); assert len(d['items']) > 0, 'Arquivo de notícias vazio'; print(len(d['items']), 'notícias prontas para publicar')"
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+        run: python atualizar.py
+
+      - name: Conferir notícias baixadas
+        run: |
+          python - <<'PY'
+          import json
+
+          with open('noticias.json', encoding='utf-8') as arquivo:
+              dados = json.load(arquivo)
+
+          noticias = dados.get('items', [])
+
+          if not noticias:
+              raise RuntimeError('Nenhuma notícia foi encontrada!')
+
+          print(f'{len(noticias)} notícias prontas para publicação.')
+          PY
+
+      - name: Configurar GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Enviar arquivos para publicação
+        uses: actions/upload-pages-artifact@v3
         with:
           path: .
-      - name: Publicar site
+
+      - name: Publicar aplicativo PWA
         id: deployment
         uses: actions/deploy-pages@v4
